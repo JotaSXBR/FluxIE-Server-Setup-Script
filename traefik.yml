@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:  traefik:
+    image: traefik:${TRAEFIK_VERSION:-latest}
+    command:
+      - "--api.insecure=false"
+      - "--providers.docker.swarmMode=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=traefik-public"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.email=admin@fluxie.com.br"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-certificates:/letsencrypt
+    networks:
+      - traefik-public
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.traefik-secure.entrypoints=websecure"
+        - "traefik.http.routers.traefik-secure.rule=Host(`traefik.fluxie.com.br`)"
+        - "traefik.http.routers.traefik-secure.service=api@internal"
+        - "traefik.http.routers.traefik-secure.middlewares=auth"
+        - "traefik.http.middlewares.auth.basicauth.users=admin:$$apr1$$FqJsq9vP$$CkA0w5yXxHUwC4pYXeYWU/"  # admin:fluxie (você deve alterar isso)
+
+networks:
+  traefik-public:
+    external: true
+
+volumes:
+  traefik-certificates:
