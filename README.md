@@ -35,8 +35,8 @@ Script automatizado para configuração de servidor Ubuntu LTS com Docker Swarm,
 
 1. Clone este repositório:
 ```bash
-git clone https://github.com/fluxie/server-setup.git
-cd server-setup
+git clone https://github.com/JotaSXBR/DatabaseSAAS.git
+cd DatabaseSAAS
 ```
 
 2. Torne o script executável:
