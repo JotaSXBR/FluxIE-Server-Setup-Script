@@ -142,13 +142,13 @@ docker stack deploy -c portainer.yml portainer
 # Copiando arquivos de configuração para o usuário deploy
 echo "Copiando arquivos de configuração para o usuário deploy..."
 BACKUP_SUFFIX=$(date +%Y%m%d_%H%M%S)
-if [ -d "/home/deploy/DatabaseSAAS" ]; then
+if [ -d "/home/deploy/FluxIE-Server-Setup-Script" ]; then
     echo "Backup da pasta existente..."
-    mv /home/deploy/DatabaseSAAS "/home/deploy/DatabaseSAAS_backup_$BACKUP_SUFFIX"
+    mv /home/deploy/FluxIE-Server-Setup-Script "/home/deploy/FluxIE-Server-Setup-Script_backup_$BACKUP_SUFFIX"
 fi
-mkdir -p /home/deploy/DatabaseSAAS
-cp traefik.yml portainer.yml install.sh README.md /home/deploy/DatabaseSAAS/
-chown -R deploy:deploy /home/deploy/DatabaseSAAS
+mkdir -p /home/deploy/FluxIE-Server-Setup-Script
+cp traefik.yml portainer.yml install.sh README.md /home/deploy/FluxIE-Server-Setup-Script/
+chown -R deploy:deploy /home/deploy/FluxIE-Server-Setup-Script
 
 echo "
 ╔═══════════════════════════════════════════════╗
@@ -159,7 +159,7 @@ echo "
 
 echo "Lembre-se de:"
 echo "1. Configurar os domínios no DNS para traefik.$DOMAIN_NAME e portainer.$DOMAIN_NAME"
-echo "2. Os arquivos de configuração foram copiados para /home/deploy/DatabaseSAAS/"
+echo "2. Os arquivos de configuração foram copiados para /home/deploy/FluxIE-Server-Setup-Script/"
 echo "3. Use o usuário 'deploy' para acessar o servidor"
 echo "4. Altere a senha do Traefik dashboard (usuário: admin, senha padrão: fluxie)"
 echo "5. Configure a senha inicial do Portainer acessando https://portainer.$DOMAIN_NAME"
