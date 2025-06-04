@@ -35,8 +35,8 @@ Script automatizado para configuração de servidor Ubuntu LTS com Docker Swarm,
 
 1. Clone este repositório:
 ```bash
-git clone https://github.com/JotaSXBR/DatabaseSAAS.git
-cd DatabaseSAAS
+git clone https://github.com/JotaSXBR/FluxIE-Server-Setup-Script.git
+cd FluxIE-Server-Setup-Script
 ```
 
 2. Torne o script executável:
