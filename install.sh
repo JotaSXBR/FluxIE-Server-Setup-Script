@@ -14,6 +14,10 @@ echo "
 Script de Instalação e Configuração do Servidor
 "
 
+# Solicitar o domínio
+read -p "Digite seu domínio (ex: exemplo.com.br): " DOMAIN_NAME
+export DOMAIN_NAME
+
 echo "Iniciando script de configuração do servidor..."
 
 # Atualização dos pacotes do sistema
@@ -95,17 +99,17 @@ echo "
 "
 
 echo "Lembre-se de:"
-echo "1. Configurar os domínios no DNS para traefik.fluxie.com.br e portainer.fluxie.com.br"
+echo "1. Configurar os domínios no DNS para traefik.$DOMAIN_NAME e portainer.$DOMAIN_NAME"
 echo "2. Configurar as chaves SSH para o usuário deploy caso ainda não tenha feito"
 echo "3. O usuário root foi desativado por segurança"
 echo "4. Use o usuário 'deploy' para acessar o servidor"
 echo "5. Altere a senha do Traefik dashboard (usuário: admin, senha padrão: fluxie)"
-echo "6. Configure a senha inicial do Portainer acessando https://portainer.fluxie.com.br"
+echo "6. Configure a senha inicial do Portainer acessando https://portainer.$DOMAIN_NAME"
 
 echo "
 Serviços instalados:
-- Traefik (https://traefik.fluxie.com.br)
-- Portainer (https://portainer.fluxie.com.br)
+- Traefik (https://traefik.$DOMAIN_NAME)
+- Portainer (https://portainer.$DOMAIN_NAME)
 
 Obrigado por usar o script de instalação FluxIE!
 Para suporte, contate nossa equipe de DevOps.

@@ -27,7 +27,7 @@ services:  traefik:
       labels:
         - "traefik.enable=true"
         - "traefik.http.routers.traefik-secure.entrypoints=websecure"
-        - "traefik.http.routers.traefik-secure.rule=Host(`traefik.fluxie.com.br`)"
+        - "traefik.http.routers.traefik-secure.rule=Host(`traefik.${DOMAIN_NAME}`)"
         - "traefik.http.routers.traefik-secure.service=api@internal"
         - "traefik.http.routers.traefik-secure.middlewares=auth"
         - "traefik.http.middlewares.auth.basicauth.users=admin:$$apr1$$FqJsq9vP$$CkA0w5yXxHUwC4pYXeYWU/"  # admin:fluxie (você deve alterar isso)
