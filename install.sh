@@ -3,6 +3,14 @@
 # Sair em caso de erro
 set -e
 
+# Função para tratamento de erros
+handle_error() {
+    echo "Erro na linha $1"
+    exit 1
+}
+
+trap 'handle_error $LINENO' ERR
+
 echo "
 ███████╗██╗     ██╗   ██╗██╗  ██╗██╗███████╗
 ██╔════╝██║     ██║   ██║╚██╗██╔╝██║██╔════╝
@@ -83,12 +91,28 @@ systemctl start docker
 systemctl enable docker
 
 # Inicializando Docker Swarm
-echo "Inicializando Docker Swarm..."
-docker swarm init --advertise-addr $(hostname -i | awk '{print $1}')
+echo "Verificando status do Docker Swarm..."
+if ! docker info 2>/dev/null | grep -q "Swarm: active"; then
+    echo "Inicializando Docker Swarm..."
+    docker swarm init --advertise-addr $(hostname -i | awk '{print $1}') || {
+        echo "Erro ao inicializar Docker Swarm"
+        exit 1
+    }
+else
+    echo "Docker Swarm já está ativo"
+fi
 
 # Criando rede para Traefik
-echo "Criando rede para Traefik..."
-docker network create --driver=overlay traefik-public
+echo "Verificando rede do Traefik..."
+if ! docker network ls | grep -q "traefik-public"; then
+    echo "Criando rede para Traefik..."
+    docker network create --driver=overlay traefik-public || {
+        echo "Erro ao criar rede do Traefik"
+        exit 1
+    }
+else
+    echo "Rede traefik-public já existe"
+fi
 
 # Instalação do Docker Compose
 echo "Instalando Docker Compose..."
@@ -98,6 +122,10 @@ chmod +x /usr/local/bin/docker-compose
 # Verificando a versão mais recente do Traefik
 echo "Obtendo a versão mais recente do Traefik..."
 TRAEFIK_VERSION=$(curl -s https://api.github.com/repos/traefik/traefik/releases/latest | grep tag_name | cut -d '"' -f 4)
+if [ -z "$TRAEFIK_VERSION" ]; then
+    echo "Não foi possível obter a versão mais recente do Traefik. Usando latest..."
+    TRAEFIK_VERSION="latest"
+fi
 echo "Versão do Traefik a ser instalada: $TRAEFIK_VERSION"
 
 # Exportando a versão do Traefik para uso no compose
@@ -113,6 +141,11 @@ docker stack deploy -c portainer.yml portainer
 
 # Copiando arquivos de configuração para o usuário deploy
 echo "Copiando arquivos de configuração para o usuário deploy..."
+BACKUP_SUFFIX=$(date +%Y%m%d_%H%M%S)
+if [ -d "/home/deploy/DatabaseSAAS" ]; then
+    echo "Backup da pasta existente..."
+    mv /home/deploy/DatabaseSAAS "/home/deploy/DatabaseSAAS_backup_$BACKUP_SUFFIX"
+fi
 mkdir -p /home/deploy/DatabaseSAAS
 cp traefik.yml portainer.yml install.sh README.md /home/deploy/DatabaseSAAS/
 chown -R deploy:deploy /home/deploy/DatabaseSAAS
