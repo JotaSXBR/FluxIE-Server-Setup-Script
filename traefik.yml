@@ -4,24 +4,44 @@ services:
   traefik:
     image: traefik:${TRAEFIK_VERSION:-latest}
     command:
-      - "--api.insecure=false"
+      # --- API, Providers e Entrypoints ---
       - "--api.dashboard=true"
       - "--providers.docker.swarmMode=true"
       - "--providers.docker.exposedbydefault=false"
       - "--providers.docker.network=traefik-public"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
+
+      # --- Redirecionamento Global de HTTP para HTTPS ---
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+
+      # --- Configuração do Let's Encrypt ---
       - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
       - "--certificatesresolvers.letsencrypt.acme.email=admin@${DOMAIN_NAME}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
-      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
-      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+
+      # --- Logging para Produção ---
+      - "--accesslog=true"
+      - "--accesslog.format=json"
+      - "--log.level=INFO"
+      - "--log.format=json"
+
+      # --- Middlewares Globais (Apenas Headers de Segurança) ---
+      # REMOVIDO: A compressão Gzip não é mais aplicada globalmente.
+      - "--entrypoints.websecure.http.middlewares=chain-secure-headers@docker"
+      
+      # --- Configurações de TLS/SSL Otimizadas ---
+      - "--serverstransport.insecureskipverify=true"
+      - "--entrypoints.websecure.http.tls.options=tls-options@file"
+
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - traefik-certificates:/letsencrypt
+      - ./traefik-dynamic.yml:/etc/traefik/traefik-dynamic.yml:ro
     networks:
       - traefik-public
     secrets:
@@ -35,16 +55,36 @@ services:
         delay: 5s
         max_attempts: 3
         window: 120s
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
       labels:
+        # --- Labels do Próprio Traefik ---
         - "traefik.enable=true"
         - "traefik.http.routers.traefik-secure.entrypoints=websecure"
         - "traefik.http.routers.traefik-secure.rule=Host(`traefik.${DOMAIN_NAME}`)"
         - "traefik.http.routers.traefik-secure.service=api@internal"
-        - "traefik.http.routers.traefik-secure.middlewares=auth"
+        - "traefik.http.routers.traefik-secure.middlewares=auth@docker,secure-ratelimit@docker"
+
+        # --- Definição dos Middlewares (SEM GZIP) ---
         - "traefik.http.middlewares.auth.basicauth.usersfile=/run/secrets/traefik_dashboard_users"
+        - "traefik.http.middlewares.secure-ratelimit.ratelimit.average=10"
+        - "traefik.http.middlewares.secure-ratelimit.ratelimit.burst=20"
+        - "traefik.http.middlewares.chain-secure-headers.chain.middlewares=security-headers"
+        - "traefik.http.middlewares.security-headers.headers.stsSeconds=31536000"
+        - "traefik.http.middlewares.security-headers.headers.stsIncludeSubdomains=true"
+        - "traefik.http.middlewares.security-headers.headers.stsPreload=true"
+        - "traefik.http.middlewares.security-headers.headers.forceSTSHeader=true"
+        - "traefik.http.middlewares.security-headers.headers.contentTypeNosniff=true"
         - "traefik.http.middlewares.security-headers.headers.browserXssFilter=true"
-        - "traefik.http.middlewares.security-headers.headers.frameDeny=true"
-        - "traefik.http.middlewares.security-headers.headers.sslRedirect=true"
+        - "traefik.http.middlewares.security-headers.headers.customFrameOptionsValue=SAMEORIGIN"
+        - "traefik.http.middlewares.security-headers.headers.referrerPolicy=strict-origin-when-cross-origin"
+        - "traefik.http.middlewares.security-headers.headers.permissionsPolicy=camera=(), microphone=(), geolocation=(), payment=(), usb=(), vr=()"
+        - "traefik.http.middlewares.security-headers.headers.customResponseHeaders.X-Robots-Tag=none"
 
 networks:
   traefik-public:

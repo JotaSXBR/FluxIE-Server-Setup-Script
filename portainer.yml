@@ -24,6 +24,13 @@ services:
         - "traefik.http.routers.portainer-secure.rule=Host(`portainer.${DOMAIN_NAME}`)"
         - "traefik.http.routers.portainer-secure.tls.certresolver=letsencrypt"
         - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+        
+        # --- ADICIONADO: Compressão Gzip Opt-In ---
+        # 1. Aplica o middleware 'gzip' a este roteador
+        - "traefik.http.routers.portainer-secure.middlewares=gzip@docker"
+        # 2. Define o que o middleware 'gzip' faz
+        - "traefik.http.middlewares.gzip.compress=true"
+
       resources:
         limits:
           cpus: '0.5'
