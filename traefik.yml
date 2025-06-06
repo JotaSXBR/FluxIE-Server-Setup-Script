@@ -1,14 +1,17 @@
 version: '3.8'
 
-services:  traefik:
+services:
+  traefik:
     image: traefik:${TRAEFIK_VERSION:-latest}
     command:
       - "--api.insecure=false"
+      - "--api.dashboard=true"
       - "--providers.docker.swarmMode=true"
       - "--providers.docker.exposedbydefault=false"
       - "--providers.docker.network=traefik-public"
       - "--entrypoints.web.address=:80"
-      - "--entrypoints.websecure.address=:443"      - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
       - "--certificatesresolvers.letsencrypt.acme.email=admin@${DOMAIN_NAME}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
       - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
@@ -21,17 +24,24 @@ services:  traefik:
       - traefik-certificates:/letsencrypt
     networks:
       - traefik-public
+    secrets:
+      - traefik_dashboard_users
     deploy:
       placement:
         constraints:
           - node.role == manager
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
       labels:
         - "traefik.enable=true"
         - "traefik.http.routers.traefik-secure.entrypoints=websecure"
         - "traefik.http.routers.traefik-secure.rule=Host(`traefik.${DOMAIN_NAME}`)"
         - "traefik.http.routers.traefik-secure.service=api@internal"
         - "traefik.http.routers.traefik-secure.middlewares=auth"
-        - "traefik.http.middlewares.auth.basicauth.users=admin:$$apr1$$FqJsq9vP$$CkA0w5yXxHUwC4pYXeYWU/"  # admin:fluxie (você deve alterar isso)
+        - "traefik.http.middlewares.auth.basicauth.usersfile=/run/secrets/traefik_dashboard_users"
 
 networks:
   traefik-public:
@@ -39,3 +49,7 @@ networks:
 
 volumes:
   traefik-certificates:
+
+secrets:
+  traefik_dashboard_users:
+    external: true
