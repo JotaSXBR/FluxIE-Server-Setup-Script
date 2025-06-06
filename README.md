@@ -67,7 +67,7 @@ sudo ./install.sh
    - Configura permissões sudo
 
 2. **Segurança**
-   - Desativa login root
+   - Prepara o ambiente para desativar o login root (cria usuário 'deploy', configura SSH)
    - Configura chaves SSH
    - Configura permissões adequadas
 
@@ -84,21 +84,18 @@ sudo ./install.sh
 ## 🎯 Pós-instalação
 
 1. Configure os domínios DNS:
-   - traefik.fluxie.com.br
-   - portainer.fluxie.com.br
+   - `traefik.SEU_DOMINIO.COM` (substitua `SEU_DOMINIO.COM` pelo domínio que você informou ao script)
+   - `portainer.SEU_DOMINIO.COM` (substitua `SEU_DOMINIO.COM` pelo domínio que você informou ao script)
 
 2. Configure as senhas:
-   - Traefik dashboard (usuário: admin, senha padrão: fluxie)
-   - Portainer (primeiro acesso)
+   - Traefik dashboard: usuário `admin`. A senha foi gerada aleatoriamente e exibida durante a execução do script. Certifique-se de tê-la anotado.
+   - Portainer: defina a senha do administrador no primeiro acesso.
 
 3. Use o usuário `deploy` para acessar o servidor
 
 ## 🔒 Segurança
 
-- O acesso root é desativado por padrão
-- Autenticação básica no dashboard do Traefik
-- Comunicação HTTPS com certificados automáticos Let's Encrypt
-- Usuário deploy com permissões sudo controladas
+- O script prepara o sistema para que o acesso root via senha seja desativado (recomendado como passo manual adicional, editando `/etc/ssh/sshd_config` e reiniciando o serviço SSH).
 
 ## 📞 Suporte
 
