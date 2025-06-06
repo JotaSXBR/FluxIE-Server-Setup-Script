@@ -71,9 +71,19 @@ chown -R deploy:deploy /home/deploy/.ssh
 
 # Instalação do Docker
 echo "Instalando Docker..."
-apt-get install -y apt-transport-https ca-certificates curl software-properties-common
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
-add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+apt-get install -y apt-transport-https ca-certificates curl software-properties-common gnupg
+
+# Adicionar diretório de chaves GPG do APT se não existir
+install -m 0755 -d /etc/apt/keyrings
+
+# Baixar e adicionar a chave GPG oficial do Docker
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+chmod a+r /etc/apt/keyrings/docker.gpg
+
+# Adicionar o repositório do Docker ao APT sources
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
 apt-get update
 apt-get install -y docker-ce docker-ce-cli containerd.io
 
@@ -98,6 +108,7 @@ if ! docker info 2>/dev/null | grep -q "Swarm: active"; then
         SWARM_ADVERTISE_IP=$(echo $IP_ADDRESSES | awk '{print $1}')
         echo "Um único endereço IP encontrado: $SWARM_ADVERTISE_IP. Usando este para o Docker Swarm."
     elif [ "$NUM_IPS" -gt 1 ]; then
+        PS3="Por favor, escolha o IP para o Docker Swarm advertise address: "
         echo "Múltiplos endereços IP encontrados:"
         select selected_ip in $IP_ADDRESSES; do
             if [ -n "$selected_ip" ]; then
@@ -197,6 +208,12 @@ if [ -z "$PORTAINER_VERSION" ]; then
     PORTAINER_VERSION="latest"
 fi
 echo "Versão do Portainer a ser instalada: $PORTAINER_VERSION"
+# Adicionando validação de versão para Portainer
+if [[ ! "$PORTAINER_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && [ "$PORTAINER_VERSION" != "latest" ]; then
+    echo "Formato de versão do Portainer inválido: '$PORTAINER_VERSION'. Usando 'latest'..."
+    PORTAINER_VERSION="latest"
+fi
+
 
 # Deploy do Portainer
 echo "Deployando Portainer..."
@@ -210,7 +227,7 @@ if [ -d "/home/deploy/FluxIE-Server-Setup-Script" ]; then
     mv /home/deploy/FluxIE-Server-Setup-Script "/home/deploy/FluxIE-Server-Setup-Script_backup_$BACKUP_SUFFIX"
 fi
 mkdir -p /home/deploy/FluxIE-Server-Setup-Script
-cp traefik.yml portainer.yml install.sh README.md /home/deploy/FluxIE-Server-Setup-Script/
+cp traefik.yml portainer.yml traefik-dynamic.yml install.sh README.md /home/deploy/FluxIE-Server-Setup-Script/
 chown -R deploy:deploy /home/deploy/FluxIE-Server-Setup-Script
 
 # Limpeza de pacotes

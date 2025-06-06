@@ -11,6 +11,7 @@ services:
       - "--providers.docker.network=traefik-public"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.websecure.address=:443"
 
       # --- Redirecionamento Global de HTTP para HTTPS ---
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
@@ -20,6 +21,7 @@ services:
       - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
       - "--certificatesresolvers.letsencrypt.acme.email=admin@${DOMAIN_NAME}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--providers.file.filename=/etc/traefik/traefik-dynamic.yml" # Adicionado para carregar config dinâmica
 
       # --- Logging para Produção ---
       - "--accesslog=true"
