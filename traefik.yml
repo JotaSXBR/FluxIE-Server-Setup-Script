@@ -42,6 +42,9 @@ services:
         - "traefik.http.routers.traefik-secure.service=api@internal"
         - "traefik.http.routers.traefik-secure.middlewares=auth"
         - "traefik.http.middlewares.auth.basicauth.usersfile=/run/secrets/traefik_dashboard_users"
+        - "traefik.http.middlewares.security-headers.headers.browserXssFilter=true"
+        - "traefik.http.middlewares.security-headers.headers.frameDeny=true"
+        - "traefik.http.middlewares.security-headers.headers.sslRedirect=true"
 
 networks:
   traefik-public:

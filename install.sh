@@ -152,6 +152,12 @@ if [ -z "$TRAEFIK_VERSION" ]; then
 fi
 echo "Versão do Traefik a ser instalada: $TRAEFIK_VERSION"
 
+# Adicionando validação de versão
+if [[ ! "$TRAEFIK_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] && [ "$TRAEFIK_VERSION" != "latest" ]; then
+    echo "Formato de versão do Traefik inválido. Usando 'latest'..."
+    TRAEFIK_VERSION="latest"
+fi
+
 # Geração e Configuração da Senha do Traefik Dashboard com Docker Secret
 echo "Gerando senha para o Traefik Dashboard..."
 TRAEFIK_ADMIN_PASSWORD_RAW=$(openssl rand -base64 16)
@@ -230,4 +236,3 @@ Serviços instalados:
 - Portainer (https://portainer.$DOMAIN_NAME)
 "
 # A seção de desativação do root permanece a mesma, pois já é excelente.
-...
