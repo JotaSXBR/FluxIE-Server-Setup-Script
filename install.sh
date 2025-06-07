@@ -304,6 +304,7 @@ envsubst '\$DOMAIN_NAME' < evolution.yml | docker stack deploy -c - evolution
 echo "Stack da Evolution API deployada."
 echo "-----------------------------------------------------"
 
+      
 # --- Configuração do n8n ---
 echo "-----------------------------------------------------"
 echo "Configurando a automação com n8n..."
@@ -320,9 +321,14 @@ create_or_update_secret "n8n_db_name" "$N8N_DB_NAME"
 create_or_update_secret "n8n_db_password" "$N8N_DB_PASSWORD"
 POSTGRES_CONTAINER_ID=$(docker ps -q --filter "name=postgres_postgres" | head -n 1)
 if [ -n "$POSTGRES_CONTAINER_ID" ]; then
-    echo "Criando usuário e banco de dados para n8n no PostgreSQL..."
-    docker exec "$POSTGRES_CONTAINER_ID" psql -U postgres -c "CREATE USER $N8N_DB_USER WITH PASSWORD '$N8N_DB_PASSWORD';" || echo "Usuário $N8N_DB_USER já existe. Pulando."
-    docker exec "$POSTGRES_CONTAINER_ID" psql -U postgres -c "CREATE DATABASE $N8N_DB_NAME OWNER $N8N_DB_USER;" || echo "Banco de dados $N8N_DB_NAME já existe. Pulando."
+    echo "Aguardando o PostgreSQL ficar pronto para criar o banco de dados do n8n..."
+    sleep 15 # Espera para garantir que o Postgres teve tempo de iniciar
+
+    # ✅✅✅ AQUI ESTÁ A CORREÇÃO CRÍTICA DO 'docker exec' ✅✅✅
+    # O comando psql agora é passado como argumento para ser executado DENTRO do container.
+    docker exec "$POSTGRES_CONTAINER_ID" psql -U postgres -d postgres -c "CREATE USER $N8N_DB_USER WITH PASSWORD '$N8N_DB_PASSWORD';" || echo "Usuário n8n já existe. Pulando."
+    docker exec "$POSTGRES_CONTAINER_ID" psql -U postgres -d postgres -c "CREATE DATABASE $N8N_DB_NAME OWNER $N8N_DB_USER;" || echo "Banco de dados n8n já existe. Pulando."
+    echo "Usuário e banco de dados para n8n configurados."
 else
     echo "AVISO: Container do PostgreSQL não encontrado. A criação do usuário e banco para n8n foi pulada."
 fi
@@ -330,7 +336,7 @@ read -s -p "Digite a chave de criptografia do n8n (Enter para gerar uma): " N8N_
 echo
 if [ -z "$N8N_ENCRYPTION_KEY" ]; then
     N8N_ENCRYPTION_KEY=$(openssl rand -hex 16)
-    echo "Chave de criptografia do n8n gerada: $N8N_ENCRYPTION_KEY (ANOTE! CRÍTICO PARA RECUPERAÇÃO!)"
+    echo "Chave de criptografia do n8n gerada: $N8N_ENCRYPTION_KEY (ANOTE! CRÍTICO!)"
 fi
 create_or_update_secret "n8n_encryption_key" "$N8N_ENCRYPTION_KEY"
 cat > n8n.env <<EOF
