@@ -44,18 +44,31 @@ main() {
         echo "Usuário 'deploy' já existe. Pulando criação."
     else
         echo "Configurando o usuário 'deploy'..."
-        read -s -p "Digite a senha para o novo usuário deploy: " DEPLOY_PASSWORD
-        echo; read -s -p "Confirme a senha: "; echo
-        [ "$DEPLOY_PASSWORD" != "$DEPLOY_PASSWORD_CONFIRM" ] && { echo "As senhas não coincidem."; exit 1; }
-        useradd -m -s /bin/bash deploy && echo "deploy:$DEPLOY_PASSWORD" | chpasswd && usermod -aG sudo deploy
-    fi
+        
+        # ✅✅✅ AQUI ESTÁ A CORREÇÃO ✅✅✅
+        # Separamos os comandos read em linhas distintas para evitar problemas de buffer.
+        
+        # Loop para garantir que a senha seja digitada corretamente
+        while true; do
+            read -s -p "Digite a senha para o novo usuário deploy: " DEPLOY_PASSWORD
+            echo
+            read -s -p "Confirme a senha: " DEPLOY_PASSWORD_CONFIRM
+            echo
 
-    if [ ! -d "/home/deploy/.ssh" ]; then
-        read -p "Cole sua chave SSH pública para 'deploy' (Enter para pular): " SSH_KEY
-        mkdir -p /home/deploy/.ssh && chmod 700 /home/deploy/.ssh
-        [ ! -z "$SSH_KEY" ] && echo "$SSH_KEY" > /home/deploy/.ssh/authorized_keys
-        [ -f /root/.ssh/authorized_keys ] && cp /root/.ssh/authorized_keys /home/deploy/.ssh/
-        chmod 600 /home/deploy/.ssh/authorized_keys && chown -R deploy:deploy /home/deploy/.ssh
+            if [ "$DEPLOY_PASSWORD" = "$DEPLOY_PASSWORD_CONFIRM" ]; then
+                if [ -z "$DEPLOY_PASSWORD" ]; then
+                    echo "A senha não pode ser vazia. Tente novamente."
+                else
+                    # Senhas coincidem e não estão vazias, pode sair do loop
+                    break
+                fi
+            else
+                echo "As senhas não coincidem. Por favor, tente novamente."
+            fi
+        done
+        
+        echo "Criando usuário deploy..."
+        useradd -m -s /bin/bash deploy && echo "deploy:$DEPLOY_PASSWORD" | chpasswd && usermod -aG sudo deploy
     fi
 
     # --- Instalação de Pacotes e Docker ---
