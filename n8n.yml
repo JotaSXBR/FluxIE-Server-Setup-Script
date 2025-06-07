@@ -14,18 +14,31 @@ x-n8n-common: &n8n-common
   networks:
     - backend-network
   secrets:
-    - n8n_db_user
-    - n8n_db_name
-    - n8n_db_password
     - n8n_encryption_key
     - redis_password
-  deploy: &n8n-common-deploy # ✅✅✅ DEFINIÇÃO DA ÂNCORA DE DEPLOY AQUI ✅✅✅
+  healthcheck:
+    test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:5678/healthz || exit 1"]
+    interval: 30s
+    timeout: 10s
+    retries: 3
+    start_period: 60s
+  deploy: &n8n-common-deploy
     mode: replicated
     placement:
       constraints:
         - node.role == manager
     restart_policy:
       condition: on-failure
+      delay: 5s
+      max_attempts: 3
+      window: 120s
+    resources:
+      limits:
+        cpus: '2.0'  # Ajustado para servidor 4CPU
+        memory: 2G   # Ajustado para servidor 8GB
+      reservations:
+        cpus: '0.5'
+        memory: 512M
 
 services:
   n8n-editor:
@@ -34,13 +47,17 @@ services:
     networks: [ backend-network, traefik-public ]
     deploy:
       <<: *n8n-common-deploy # Herda o deploy comum
+      replicas: 1
       labels:
         - "traefik.enable=true"
         - "traefik.http.routers.n8n-editor.rule=Host(`n8n.${DOMAIN_NAME}`)"
         - "traefik.http.routers.n8n-editor.entrypoints=websecure"
         - "traefik.http.routers.n8n-editor.tls.certresolver=letsencrypt"
-        - "traefik.http.services.n8n-editor-service.loadbalancer.server.port=5678" # Serviço dedicado
+        - "traefik.http.services.n8n-editor-service.loadbalancer.server.port=5678"
         - "traefik.http.routers.n8n-editor.service=n8n-editor-service"
+        - "traefik.http.routers.n8n-editor.middlewares=secure-ratelimit@docker"
+        - "traefik.http.middlewares.secure-ratelimit.ratelimit.average=30"
+        - "traefik.http.middlewares.secure-ratelimit.ratelimit.burst=50"
 
   n8n-webhook:
     <<: *n8n-common
@@ -48,7 +65,14 @@ services:
     networks: [ backend-network, traefik-public ]
     deploy:
       <<: *n8n-common-deploy
-      replicas: 2
+      replicas: 2  # Múltiplas instâncias para alta disponibilidade
+      resources:
+        limits:
+          cpus: '1.0'  
+          memory: 1G   
+        reservations:
+          cpus: '0.25'
+          memory: 256M
       labels:
         - "traefik.enable=true"
         - "traefik.http.routers.n8n-webhook.rule=Host(`webhook-n8n.${DOMAIN_NAME}`)"
@@ -62,11 +86,25 @@ services:
     <<: *n8n-common
     command: webhook
     networks: [ backend-network, traefik-public ]
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:5678/webhook/mcp/health || wget --no-verbose --tries=1 --spider http://localhost:5678/healthz || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
     deploy:
       <<: *n8n-common-deploy
+      replicas: 1  # Container específico para MCP
+      resources:
+        limits:
+          cpus: '1.0'  
+          memory: 1G   
+        reservations:
+          cpus: '0.25'
+          memory: 256M
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.n8n-mcp-api.rule=(Host(`webhook-n8n.${DOMAIN_NAME}`) && PathPrefix(`/webhook/mcp`))"
+        - "traefik.http.routers.n8n-mcp-api.rule=(Host(`webhook-n8n.${DOMAIN_NAME}`) && PathPrefix(`/mcp`))"
         - "traefik.http.routers.n8n-mcp-api.entrypoints=websecure"
         - "traefik.http.routers.n8n-mcp-api.tls.certresolver=letsencrypt"
         - "traefik.http.routers.n8n-mcp-api.service=n8n-mcp-api-service"
@@ -78,9 +116,22 @@ services:
   n8n-worker:
     <<: *n8n-common
     command: worker --concurrency=10
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'n8n worker' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     deploy:
       <<: *n8n-common-deploy
-      replicas: 2
+      replicas: 2  # Múltiplos workers para processar filas
+      resources:
+        limits:
+          cpus: '1.5'  
+          memory: 1.5G   
+        reservations:
+          cpus: '0.5'
+          memory: 512M
 
 volumes:
   n8n_data:
@@ -90,8 +141,5 @@ networks:
   backend-network: { external: true }
 
 secrets:
-  n8n_db_user: { external: true }
-  n8n_db_name: { external: true }
-  n8n_db_password: { external: true }
   n8n_encryption_key: { external: true }
   redis_password: { external: true }
