@@ -238,3 +238,8 @@ else
     echo "O acesso root via SSH não foi desativado. Você pode fazer isso manualmente mais tarde."
     echo "AVISO: Manter o acesso root via SSH ativado não é recomendado em ambiente de produção."
 fi
+}
+
+# --- Execução do Script ---
+# Chama a função principal, passando quaisquer argumentos que o script tenha recebido
+main "$@"
