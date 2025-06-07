@@ -49,14 +49,34 @@ chmod +x install.sh
 sudo ./install.sh
 ```
 
-## 📁 Estrutura do Projeto
+## Serviços Instalados
+
+- **Traefik**: Reverse proxy e dashboard ([https://traefik.SEUDOMINIO](https://traefik.SEUDOMINIO))
+- **Portainer**: Gerenciamento Docker ([https://portainer.SEUDOMINIO](https://portainer.SEUDOMINIO))
+- **PostgreSQL**: Banco de dados relacional
+- **Redis**: Cache e filas
+- **Redis Insight**: Interface web para Redis ([https://redis-insight.SEUDOMINIO](https://redis-insight.SEUDOMINIO))
+- **MinIO**: Armazenamento de objetos S3 ([https://s3.SEUDOMINIO](https://s3.SEUDOMINIO), [https://s3api.SEUDOMINIO](https://s3api.SEUDOMINIO))
+- **Evolution API**: API de integração WhatsApp ([https://api.SEUDOMINIO](https://api.SEUDOMINIO))
+- **n8n**: Automação de workflows ([https://n8n.SEUDOMINIO](https://n8n.SEUDOMINIO), [https://webhook-n8n.SEUDOMINIO](https://webhook-n8n.SEUDOMINIO))
+
+## Estrutura do Projeto
 
 ```
 .
-├── install.sh       # Script principal de instalação
-├── traefik.yml     # Configuração do Traefik
-├── portainer.yml   # Configuração do Portainer
-└── README.md       # Este arquivo
+├── install.sh
+├── traefik.yml
+├── portainer.yml
+├── postgres.yml
+├── redis.yml
+├── minio.yml
+├── evolution.yml
+├── n8n.yml
+├── init-db.sh
+├── entrypoint.sh
+├── entrypoint-n8n.sh
+├── README.md
+└── ...
 ```
 
 ## ⚙️ O que o Script Faz
