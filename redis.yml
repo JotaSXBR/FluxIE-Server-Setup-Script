@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # O servidor Redis v8. Isolado e seguro.
   redis:
-    # Usando a versão específica do Redis 8 que você solicitou.
+    # Usando a versão específica do Redis 8.
     image: redis:8.0.1-alpine
     # Comando seguro que força o uso de senha lida de um arquivo.
     command: redis-server --requirepass-file /run/secrets/redis_password
@@ -15,8 +15,9 @@ services:
     secrets:
       - redis_password
     healthcheck:
-      # Healthcheck autenticado, compatível com Redis 8.
-      test: ["CMD", "redis-cli", "-a", "$(< /run/secrets/redis_password)", "ping"]
+      # ✅ AQUI ESTÁ A CORREÇÃO CRÍTICA ✅
+      # Trocamos $(...) por $$(...). O $$ envia um único $ literal para o container.
+      test: ["CMD", "redis-cli", "-a", "$$(< /run/secrets/redis_password)", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
