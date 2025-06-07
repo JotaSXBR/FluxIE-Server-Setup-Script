@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  # O servidor Redis v8. Isolado e seguro.
+  redis:
+    # Usando a versão específica do Redis 8 que você solicitou.
+    image: redis:8.0.1-alpine
+    # Comando seguro que força o uso de senha lida de um arquivo.
+    command: redis-server --requirepass-file /run/secrets/redis_password
+    volumes:
+      - redis_data:/data
+    networks:
+      # Conectado APENAS à rede interna segura.
+      - backend-network
+    secrets:
+      - redis_password
+    healthcheck:
+      # Healthcheck autenticado, compatível com Redis 8.
+      test: ["CMD", "redis-cli", "-a", "$(< /run/secrets/redis_password)", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  # A interface de gerenciamento para o Redis.
+  redis-insight:
+    image: redislabs/redisinsight:latest
+    volumes:
+      - redis_insight_data:/db
+    networks:
+      - traefik-public # Para ser acessível pela web.
+      - backend-network # Para se conectar ao serviço 'redis'.
+    depends_on:
+      - redis
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+      labels:
+        # Configuração padrão do Traefik para um serviço web.
+        - "traefik.enable=true"
+        - "traefik.http.routers.redisinsight-secure.entrypoints=websecure"
+        - "traefik.http.routers.redisinsight-secure.rule=Host(`redis-insight.${DOMAIN_NAME}`)"
+        - "traefik.http.routers.redisinsight-secure.tls.certresolver=letsencrypt"
+        - "traefik.http.services.redisinsight.loadbalancer.server.port=8001"
+        
+        # Ativando compressão Gzip para a interface web.
+        - "traefik.http.routers.redisinsight-secure.middlewares=gzip@docker"
+        - "traefik.http.middlewares.gzip.compress=true"
+
+volumes:
+  redis_data:
+  redis_insight_data:
+
+networks:
+  traefik-public:
+    external: true
+  backend-network:
+    external: true
+
+secrets:
+  redis_password:
+    external: true

@@ -1,0 +1,100 @@
+version: '3.8'
+
+# Âncora YAML para definir a configuração comum uma única vez
+x-n8n-common: &n8n-common
+  image: n8nio/n8n:latest # Versão estável mais recente
+  env_file:
+    - n8n.env
+  entrypoint: /home/node/.n8n/entrypoint-n8n.sh # Nosso script adaptador
+  volumes:
+    - n8n_data:/home/node/.n8n
+    - ./entrypoint-n8n.sh:/home/node/.n8n/entrypoint-n8n.sh:ro
+  networks:
+    - backend-network
+  secrets:
+    - n8n_db_user
+    - n8n_db_name
+    - n8n_db_password
+    - n8n_encryption_key
+    - redis_password
+  deploy:
+    mode: replicated
+    placement:
+      constraints:
+        - node.role == manager
+    restart_policy:
+      condition: on-failure
+
+services:
+  n8n-editor:
+    <<: *n8n-common # Herda toda a configuração comum
+    command: start
+    networks: [ backend-network, traefik-public ]
+    deploy:
+      <<: *n8n-common-deploy # Herda o deploy comum
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.n8n-editor.rule=Host(`n8n.${DOMAIN_NAME}`)"
+        - "traefik.http.routers.n8n-editor.entrypoints=websecure"
+        - "traefik.http.routers.n8n-editor.tls.certresolver=letsencrypt"
+        - "traefik.http.services.n8n.loadbalancer.server.port=5678"
+
+  n8n-webhook:
+    <<: *n8n-common
+    command: webhook
+    networks: [ backend-network, traefik-public ]
+    deploy:
+      <<: *n8n-common-deploy
+      replicas: 2
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.n8n-webhook.rule=Host(`webhook-n8n.${DOMAIN_NAME}`)"
+        - "traefik.http.routers.n8n-webhook.entrypoints=websecure"
+        - "traefik.http.routers.n8n-webhook.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.n8n-webhook.service=n8n-webhook-service" # Serviço Traefik dedicado
+        - "traefik.http.services.n8n-webhook-service.loadbalancer.server.port=5678"
+        # Prioridade baixa: esta é a regra geral "pega-tudo"
+        - "traefik.http.routers.n8n-webhook.priority=1"
+
+  # REINTRODUZIDO: O serviço MCP com sua configuração específica
+  n8n-mcp-api:
+    <<: *n8n-common
+    command: webhook # Também roda como um processo de webhook
+    networks: [ backend-network, traefik-public ]
+    deploy:
+      <<: *n8n-common-deploy
+      labels:
+        - "traefik.enable=true"
+        # Regra mais específica: Host E PathPrefix
+        - "traefik.http.routers.n8n-mcp-api.rule=(Host(`webhook-n8n.${DOMAIN_NAME}`) && PathPrefix(`/webhook/mcp`))" # Ajuste o PathPrefix se necessário
+        - "traefik.http.routers.n8n-mcp-api.entrypoints=websecure"
+        - "traefik.http.routers.n8n-mcp-api.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.n8n-mcp-api.service=n8n-mcp-api-service" # Serviço Traefik dedicado
+        - "traefik.http.services.n8n-mcp-api-service.loadbalancer.server.port=5678"
+        # Prioridade alta: Traefik verifica esta regra PRIMEIRO
+        - "traefik.http.routers.n8n-mcp-api.priority=10"
+        # Aplica o middleware nogzip
+        - "traefik.http.routers.n8n-mcp-api.middlewares=nogzip@docker"
+        # Definição do middleware nogzip (simplesmente remove o header de codificação)
+        - "traefik.http.middlewares.nogzip.headers.customresponseheaders.Content-Encoding="
+
+  n8n-worker:
+    <<: *n8n-common
+    command: worker --concurrency=10
+    deploy:
+      <<: *n8n-common-deploy
+      replicas: 2
+
+volumes:
+  n8n_data:
+
+networks:
+  traefik-public: { external: true }
+  backend-network: { external: true }
+
+secrets:
+  n8n_db_user: { external: true }
+  n8n_db_name: { external: true }
+  n8n_db_password: { external: true }
+  n8n_encryption_key: { external: true }
+  redis_password: { external: true }

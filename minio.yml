@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  # O servidor MinIO principal e único serviço nesta stack.
+  minio:
+    # Usando uma versão estável e fixada para produção.
+    image: minio/minio:RELEASE.2024-06-04T12-14-41Z
+    command: server /data --console-address ":9001"
+    environment:
+      # Credenciais lidas de forma segura a partir dos secrets.
+      - MINIO_ROOT_USER_FILE=/run/secrets/minio_root_user
+      - MINIO_ROOT_PASSWORD_FILE=/run/secrets/minio_root_password
+      # URLs para o Traefik e o MinIO se comunicarem corretamente.
+      - MINIO_SERVER_URL=https://s3api.${DOMAIN_NAME}
+      - MINIO_BROWSER_REDIRECT_URL=https://s3.${DOMAIN_NAME}
+    volumes:
+      - minio_data:/data
+    networks:
+      # Conectado à rede pública para acesso via Traefik.
+      - traefik-public
+    secrets:
+      - minio_root_user
+      - minio_root_password
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+      labels:
+        - "traefik.enable=true"
+        # --- Roteador para a API S3 (porta 9000) ---
+        - "traefik.http.routers.minio-api.rule=Host(`s3api.${DOMAIN_NAME}`)"
+        - "traefik.http.routers.minio-api.entrypoints=websecure"
+        - "traefik.http.routers.minio-api.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.minio-api.service=minio-api-service"
+
+        # --- Roteador para o Console Web (porta 9001) ---
+        - "traefik.http.routers.minio-console.rule=Host(`s3.${DOMAIN_NAME}`)"
+        - "traefik.http.routers.minio-console.entrypoints=websecure"
+        - "traefik.http.routers.minio-console.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.minio-console.service=minio-console-service"
+
+        # --- Definição dos Serviços Traefik (um para cada porta) ---
+        - "traefik.http.services.minio-api-service.loadbalancer.server.port=9000"
+        - "traefik.http.services.minio-console-service.loadbalancer.server.port=9001"
+
+volumes:
+  minio_data:
+
+networks:
+  traefik-public:
+    external: true
+
+secrets:
+  minio_root_user:
+    external: true
+  minio_root_password:
+    external: true

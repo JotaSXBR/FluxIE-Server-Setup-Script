@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  postgres:
+    # Usando a versão estável mais recente com suporte a vetores.
+    image: pgvector/pgvector:pg16
+    environment:
+      # As credenciais são lidas de forma segura dos arquivos de secret.
+      # Nenhum dado sensível fica visível no 'docker inspect'.
+      - POSTGRES_DB_FILE=/run/secrets/postgres_db
+      - POSTGRES_USER_FILE=/run/secrets/postgres_user
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
+      - TZ=America/Sao_Paulo
+    volumes:
+      # Volume para persistência dos dados.
+      - postgres_data:/var/lib/postgresql/data
+      # Script de inicialização para criar o usuário/banco de forma genérica.
+      - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    networks:
+      # Conectado APENAS à rede interna de backend.
+      - backend-network
+    secrets:
+      - postgres_db
+      - postgres_user
+      - postgres_password
+    healthcheck:
+      # CORRIGIDO: Healthcheck genérico. Apenas verifica se o servidor está pronto.
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      resources:
+        limits:
+          cpus: "1"
+          memory: 4G # Ajuste conforme a necessidade do seu workload.
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+volumes:
+  postgres_data:
+    name: postgres_data
+
+networks:
+  backend-network:
+    external: true
+
+secrets:
+  postgres_db:
+    external: true
+  postgres_user:
+    external: true
+  postgres_password:
+    external: true

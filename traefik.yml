@@ -19,7 +19,7 @@ services:
 
       # --- Configuração do Let's Encrypt ---
       - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
-      - "--certificatesresolvers.letsencrypt.acme.email=admin@${DOMAIN_NAME}"
+      - "--certificatesresolvers.letsencrypt.acme.email=${LETSENCRYPT_EMAIL}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
       - "--providers.file.filename=/etc/traefik/traefik-dynamic.yml" # Adicionado para carregar config dinâmica
 

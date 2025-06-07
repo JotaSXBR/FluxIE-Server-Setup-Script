@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  evolution-api:
+    image: atendai/evolution-api:v2.2.3 # Versão estável e recomendada
+    env_file:
+      - evolution.env # Carrega a configuração não-sensível
+    volumes:
+      - evolution_data:/evolution/instances
+      - ./entrypoint.sh:/entrypoint.sh:ro # Monta nosso script adaptador
+    entrypoint: /bin/sh /entrypoint.sh # Define nosso script como o ponto de entrada
+    networks:
+      - traefik-public # Para acesso externo via Traefik
+      - backend-network # Para acessar Postgres, Redis e MinIO
+    secrets:
+      # Disponibiliza todos os secrets necessários para o container
+      - postgres_db
+      - postgres_user
+      - postgres_password
+      - redis_password
+      - minio_root_user
+      - minio_root_password
+      - evolution_api_key
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.evolution-api.rule=Host(`api.${DOMAIN_NAME}`)"
+        - "traefik.http.routers.evolution-api.entrypoints=websecure"
+        - "traefik.http.routers.evolution-api.tls.certresolver=letsencrypt"
+        - "traefik.http.services.evolution-api.loadbalancer.server.port=8080"
+
+volumes:
+  evolution_data:
+
+networks:
+  traefik-public:
+    external: true
+  backend-network:
+    external: true
+
+secrets:
+  postgres_db: { external: true }
+  postgres_user: { external: true }
+  postgres_password: { external: true }
+  redis_password: { external: true }
+  minio_root_user: { external: true }
+  minio_root_password: { external: true }
+  evolution_api_key: { external: true }
