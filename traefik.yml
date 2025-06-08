@@ -2,38 +2,38 @@ version: '3.8'
 
 services:
   traefik:
-    image: traefik:${TRAEFIK_VERSION:-latest}
+    # Explicitly set version 2.10 which is more stable
+    image: traefik:v2.10
     command:
-      # --- API, Providers e Entrypoints ---
+      # --- API and Docker Provider Configuration ---
       - "--api.dashboard=true"
-      - "--providers.docker.swarmMode=true"
+      - "--providers.docker=true"
+      - "--providers.docker.swarmmode=true"
       - "--providers.docker.exposedbydefault=false"
       - "--providers.docker.network=traefik-public"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
-      - "--entrypoints.websecure.address=:443"
 
-      # --- Redirecionamento Global de HTTP para HTTPS ---
+      # --- Global HTTP to HTTPS Redirect ---
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
 
-      # --- Configuração do Let's Encrypt ---
+      # --- Let's Encrypt Configuration ---
       - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
       - "--certificatesresolvers.letsencrypt.acme.email=${LETSENCRYPT_EMAIL}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
       - "--providers.file.filename=/etc/traefik/traefik-dynamic.yml" # Adicionado para carregar config dinâmica
 
-      # --- Logging para Produção ---
+      # --- Production Logging ---
       - "--accesslog=true"
       - "--accesslog.format=json"
       - "--log.level=INFO"
       - "--log.format=json"
 
-      # --- Middlewares Globais (Apenas Headers de Segurança) ---
-      # REMOVIDO: A compressão Gzip não é mais aplicada globalmente.
+      # --- Global Middlewares (Security Headers Only) ---
       - "--entrypoints.websecure.http.middlewares=chain-secure-headers@docker"
       
-      # --- Configurações de TLS/SSL Otimizadas ---
+      # --- Optimized TLS/SSL Settings ---
       - "--serverstransport.insecureskipverify=true"
       - "--entrypoints.websecure.http.tls.options=tls-options@file"
 
