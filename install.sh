@@ -5,11 +5,12 @@ set -e
 
 # Função para tratamento de erros
 handle_error() {
-    echo "Erro na linha $1"
+    echo "Erro na linha $1: comando '$2' falhou"
+    echo "⚠️ Verifique o log em $LOG_FILE para mais detalhes"
     exit 1
 }
 
-trap 'handle_error $LINENO' ERR
+trap 'handle_error $LINENO $BASH_COMMAND' ERR
 
 echo "
 ███████╗██╗     ██╗   ██╗██╗  ██╗██╗███████╗
@@ -310,23 +311,53 @@ QUEUE_CONCURRENCY=10
 N8N_REINSTALL_MISSING_PACKAGES=true
 N8N_COMMUNITY_PACKAGES_ENABLED=true
 N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE=true
-DB_TYPE=sqlite
-N8N_DATABASE_TYPE=sqlite
-N8N_DATABASE_SQLITE_DATABASE=/home/node/.n8n/database.sqlite
+DB_TYPE=postgresdb
+N8N_DATABASE_TYPE=postgresdb
 EOF
 
 # n8n entrypoint
 cat > entrypoint-n8n.sh <<'EOF'
 #!/bin/sh
 set -e
+PG_DB=$(cat /run/secrets/postgres_db)
+PG_USER=$(cat /run/secrets/postgres_user)
+PG_PASS=$(cat /run/secrets/postgres_password)
 export QUEUE_BULL_REDIS_PASSWORD=$(cat /run/secrets/redis_password)
 export N8N_ENCRYPTION_KEY=$(cat /run/secrets/n8n_encryption_key)
 export QUEUE_BULL_REDIS_HOST=redis
 export QUEUE_BULL_REDIS_PORT=6379
 export QUEUE_BULL_REDIS_DB=2
+export DB_POSTGRESDB_HOST=postgres
+export DB_POSTGRESDB_PORT=5432
+export DB_POSTGRESDB_DATABASE=$PG_DB
+export DB_POSTGRESDB_USER=$PG_USER
+export DB_POSTGRESDB_PASSWORD=$PG_PASS
 exec /usr/local/bin/docker-entrypoint.sh "$@"
 EOF
 chmod +x entrypoint-n8n.sh
+
+# Função para verificar se o serviço está saudável
+wait_for_service() {
+    local service_name=$1
+    local max_attempts=30
+    local attempt=1
+    
+    echo "⏳ Aguardando serviço $service_name ficar online..."
+    while [ $attempt -le $max_attempts ]; do
+        if docker service ls --filter "name=$service_name" --format "{{.Replicas}}" | grep -q "[0-9]/[0-9]"; then
+            if docker service ls --filter "name=$service_name" --format "{{.Replicas}}" | grep -q "[0-9]/[0-9]$"; then
+                echo "✅ Serviço $service_name está online!"
+                return 0
+            fi
+        fi
+        echo "⏳ Tentativa $attempt/$max_attempts - Aguardando $service_name..."
+        sleep 10
+        attempt=$((attempt + 1))
+    done
+    
+    echo "❌ Timeout aguardando $service_name"
+    return 1
+}
 
 # =============================================================================
 # SEÇÃO 7: DEPLOY DOS SERVIÇOS
@@ -334,37 +365,40 @@ chmod +x entrypoint-n8n.sh
 
 echo "Fazendo deploy dos serviços..."
 
-# Deploy Traefik
+# Deploy e aguarda Traefik
 echo "📡 Deployando Traefik..."
 envsubst '\$DOMAIN_NAME \$LETSENCRYPT_EMAIL' < traefik.yml | docker stack deploy -c - traefik
+wait_for_service "traefik_traefik" || exit 1
 
-# Deploy Portainer
+# Deploy e aguarda Portainer
 echo "🐳 Deployando Portainer..."
 envsubst '\$DOMAIN_NAME' < portainer.yml | docker stack deploy -c - portainer
+wait_for_service "portainer_portainer" || exit 1
 
-# Deploy PostgreSQL
+# Deploy e aguarda PostgreSQL
 echo "🗄️ Deployando PostgreSQL..."
 docker stack deploy -c postgres.yml postgres
+wait_for_service "postgres_postgres" || exit 1
 
-# Deploy Redis
+# Deploy e aguarda Redis
 echo "⚡ Deployando Redis..."
 envsubst '\$DOMAIN_NAME' < redis.yml | docker stack deploy -c - redis
+wait_for_service "redis_redis" || exit 1
 
-# Deploy MinIO
+# Deploy e aguarda MinIO
 echo "📦 Deployando MinIO..."
 envsubst '\$DOMAIN_NAME' < minio.yml | docker stack deploy -c - minio
+wait_for_service "minio_minio" || exit 1
 
-# Aguardar PostgreSQL e Redis ficarem prontos
-echo "⏳ Aguardando serviços ficarem prontos..."
-sleep 30
-
-# Deploy Evolution API
+# Deploy e aguarda Evolution API
 echo "📱 Deployando Evolution API..."
 envsubst '\$DOMAIN_NAME' < evolution.yml | docker stack deploy -c - evolution
+wait_for_service "evolution_evolution" || exit 1
 
-# Deploy n8n
+# Deploy e aguarda n8n
 echo "🔄 Deployando n8n..."
 envsubst '\$DOMAIN_NAME' < n8n.yml | docker stack deploy -c - n8n
+wait_for_service "n8n_n8n" || exit 1
 
 # =============================================================================
 # SEÇÃO 8: FINALIZAÇÃO
@@ -439,3 +473,94 @@ fi
 
 echo ""
 echo "🎉 Instalação finalizada! Todos os serviços estão sendo inicializados."
+
+# Verificar versão do sistema
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    if [ "$ID" != "ubuntu" ] || [ "${VERSION_ID%%.*}" -lt 20 ]; then
+        echo "❌ Este script requer Ubuntu 20.04 ou superior"
+        exit 1
+    fi
+fi
+
+# Verificar espaço em disco
+MIN_SPACE_GB=20
+AVAILABLE_SPACE_GB=$(df -BG / | awk 'NR==2 {print $4}' | tr -d 'G')
+if [ "$AVAILABLE_SPACE_GB" -lt "$MIN_SPACE_GB" ]; then
+    echo "❌ Espaço insuficiente. Mínimo necessário: ${MIN_SPACE_GB}GB"
+    exit 1
+fi
+
+# Verificar conectividade
+echo "🌐 Verificando conectividade..."
+if ! ping -c 1 google.com &> /dev/null; then
+    echo "❌ Sem conexão com a internet"
+    exit 1
+fi
+
+# Configurar logging
+LOG_FILE="/var/log/fluxie_install.log"
+exec 1> >(tee -a "$LOG_FILE") 2>&1
+echo "📝 Log da instalação disponível em: $LOG_FILE"
+
+# Backup automático
+setup_backup() {
+    echo "📦 Configurando backup automático..."
+    mkdir -p /home/deploy/backups
+    cat > /home/deploy/backup.sh <<'EOFBACKUP'
+#!/bin/bash
+BACKUP_DIR="/home/deploy/backups"
+DATE=$(date +%Y%m%d_%H%M%S)
+# Backup PostgreSQL
+docker exec $(docker ps -qf name=postgres) pg_dumpall -U postgres > "$BACKUP_DIR/postgres_$DATE.sql"
+# Backup Redis
+docker exec $(docker ps -qf name=redis) redis-cli SAVE
+cp /var/lib/docker/volumes/redis_data/_data/dump.rdb "$BACKUP_DIR/redis_$DATE.rdb"
+# Manter apenas últimos 7 backups
+find "$BACKUP_DIR" -type f -mtime +7 -delete
+EOFBACKUP
+    chmod +x /home/deploy/backup.sh
+    chown deploy:deploy /home/deploy/backup.sh
+
+    # Adicionar ao crontab
+    (crontab -l 2>/dev/null; echo "0 3 * * * /home/deploy/backup.sh") | crontab -
+}
+
+# Adicionar backup antes da seção de finalização
+setup_backup
+
+echo "💾 Backup automático configurado (diariamente às 3h)"
+echo "📁 Backups serão salvos em: /home/deploy/backups"
+
+# Adicionar verificação de arquivos necessários
+check_required_files() {
+    local required_files=(
+        "traefik.yml"
+        "traefik-dynamic.yml"
+        "portainer.yml"
+        "postgres.yml"
+        "redis.yml"
+        "minio.yml"
+        "evolution.yml"
+        "n8n.yml"
+        "init-db.sh"
+        "entrypoint.sh"
+        "entrypoint-n8n.sh"
+    )
+
+    for file in "${required_files[@]}"; do
+        if [ ! -f "$file" ]; then
+            echo "❌ Arquivo necessário não encontrado: $file"
+            exit 1
+        fi
+    done
+    echo "✅ Todos os arquivos necessários encontrados"
+}
+
+# Adicionar verificação antes do deploy
+echo "🔍 Verificando arquivos necessários..."
+check_required_files
+
+# Adicionar verificação de permissões dos scripts
+echo "🔒 Verificando permissões dos scripts..."
+chmod +x init-db.sh entrypoint.sh entrypoint-n8n.sh
